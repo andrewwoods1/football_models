@@ -2,6 +2,11 @@
 # Load libraries ----------------------------------------------------------
 
 library(ggplot2)
+library(devtools)
+library(svglite)
+library(ggrough)
+library(htmlwidgets)
+library(showtext)
 
 
 # Load functions ----------------------------------------------------------
@@ -1267,31 +1272,44 @@ prem.fit15$BIC
 mod = prem.fit2
 
 
-H = "France"
-A = "Senegal"
-Hnum = as.numeric(train$HomeTeam[train$HomeTeam == H])[1]
-Anum = as.numeric(train$AwayTeam[train$AwayTeam == A])[1]
+H = "Colombia"
+A = "England"
+Hnum = as.numeric(df$HomeTeam[df$HomeTeam == H])[1]
+Anum = as.numeric(df$AwayTeam[df$AwayTeam == A])[1]
+Hnum
+Anum
 
 
-logged_vals = log(mod$lambda1)
-summary(mod$lambda1)
-summary(logged_vals)
+ratings = mod$beta1
+home_attack = ratings[names(ratings) == paste("HomeTeam..AwayTeam",Hnum,sep = "")]
+home_defense = ratings[names(ratings) == paste("AwayTeam..HomeTeam",Hnum,sep = "")]
 
-logged_vals[1]
-a = mod$beta1[1] + mod$beta1[Hnum + 52] + mod$beta1[Anum]
+away_attack = ratings[names(ratings) == paste("HomeTeam..AwayTeam",Anum,sep = "")]
+away_defense = ratings[names(ratings) == paste("AwayTeam..HomeTeam",Anum,sep = "")]
+
+l1 = exp(mod$beta1[1] + home_attack + away_defense)
+l2 = exp(mod$beta1[1] + away_attack + home_defense)
+l3 = mod$lambda3[1]
+
+tab = bivpois.table(10,10,lambda = c(l1,l2,l3))
+
+draw = sum(diag(tab))
+home = sum(tab[lower.tri(tab)])
+away = sum(tab[upper.tri(tab)])
+
+res = data.frame(outcome = c(H,A,"Draw"),probs = c(home,away,draw))
+res$probs = res$probs*100
 
 
+# Graph -------------------------------------------------------------------
 
+p = ggplot(data = res,aes(x = outcome,y = probs,fill = outcome)) + geom_col() + guides(fill=FALSE) +
+  xlab("Result") + ylab("% Chance") + scale_fill_manual(values=c("yellow", "grey", "red"))
 
-
-
-
-
-
-
-
-
-
+options(viewer = NULL)
+options <- list(
+  GeomCol=list(fill_style="hachure",  angle_noise=0.8, gap_noise=0.2))
+get_rough_chart(p, options, font_size_booster = 4)
 
 
 

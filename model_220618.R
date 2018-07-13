@@ -1376,10 +1376,171 @@ PseudoR2(modh, which = "all")
   }
 
 
+
 fit1 = lm.bp(FTHG ~ home_xg_per_game + xgr_diff + home_xg_per_shot +
                Away_xg_conc_per_game, 
              FTAG ~ Away_xg_per_game + xgr_diff + Away_xg_per_shot +
-               home_xg_conc_per_game,l3 =~ xgr_diff ,data = df_stats)
+               home_xg_conc_per_game,l1l2 = ~ xgr_diff, l3 =~ xgr_diff,data = df_stats)
+
+fit2 = lm.dibp(FTHG ~ home_xg_per_game + xgr_diff + home_xg_per_shot +
+                 Away_xg_conc_per_game, 
+               FTAG ~ Away_xg_per_game + xgr_diff + Away_xg_per_shot +
+                 home_xg_conc_per_game,l1l2 = ~ xgr_diff, l3 =~ xgr_diff ,data = df_stats,
+               distribution = "geometric")
+
+
+
+fit3 = lm.bp(FTHG ~ attacking_rating_home + xgr_diff + home_xg_per_shot +
+               defensive_rating_away, 
+             FTAG ~ attacking_rating_away + xgr_diff + Away_xg_per_shot +
+               defensive_rating_home,l1l2 = ~ xgr_diff, l3 =~ xgr_diff,data = df_stats)
+
+
+
+fit4 = lm.bp(FTHG ~ attacking_rating_home + xgr_diff + home_xg_per_shot +
+               defensive_rating_away, 
+             FTAG ~ attacking_rating_away + xgr_diff + Away_xg_per_shot +
+               defensive_rating_home,l1l2 = ~ xgr_diff, l3 =~ 1,data = df_stats)
+
+
+fit5 = lm.bp(FTHG ~ attacking_rating_home + xgr_diff +
+               defensive_rating_away, 
+             FTAG ~ attacking_rating_away + xgr_diff +
+               defensive_rating_home,l1l2 = ~ xgr_diff, l3 =~ 1,data = df_stats)
+
+
+fit6 = lm.bp(FTHG ~ attacking_rating_home + xgr_diff + home_xg_per_shot +
+               defensive_rating_away + home_xg_per_game:xgr_diff, 
+             FTAG ~ attacking_rating_away + xgr_diff + Away_xg_per_shot +
+               defensive_rating_home + Away_xg_per_game:xgr_diff,l1l2 = ~ xgr_diff,
+             l3 =~ 1,data = df_stats)
+
+
+fit7 = lm.dibp(FTHG ~ attacking_rating_home + xgr_diff + home_xg_per_shot +
+               defensive_rating_away + attacking_rating_home:xgr_diff, 
+             FTAG ~ attacking_rating_away + xgr_diff + Away_xg_per_shot +
+               defensive_rating_home + + attacking_rating_away:xgr_diff,l1l2 = ~ xgr_diff,
+             l3 =~ 1,data = df_stats,distribution = "discrete",jmax = 0)
+fit7$BIC
+
+fit8 = lm.dibp(FTHG ~ attacking_rating_home + xgr_diff + home_xg_per_shot +
+                 defensive_rating_away, 
+               FTAG ~ attacking_rating_away + xgr_diff + Away_xg_per_shot +
+                 defensive_rating_home,l1l2 = ~ xgr_diff,
+               l3 =~ 1,data = df_stats,distribution = "discrete",jmax = 0)
+
+fit8$coefficients
+fit8$BIC
+fit8$fitted.values
+
+
+fit9 = lm.dibp(FTHG ~ attacking_rating_home + xgr_diff + home_xg_per_shot +
+                 defensive_rating_away, 
+               FTAG ~ attacking_rating_away + xgr_diff + Away_xg_per_shot +
+                 defensive_rating_home,l1l2 = ~ xgr_diff,
+               l3 =~ 1,data = df_stats,distribution = "poisson")
+
+
+fit1$AIC
+fit2$AIC
+fit3$AIC
+fit4$AIC
+fit5$AIC
+fit6$AIC
+fit7$AIC
+fit8$AIC
+fit9$AIC
+
+
+fit10 = lm.dibp(FTHG ~ attacking_rating_home + xgr_diff +
+                 defensive_rating_away, 
+               FTAG ~ attacking_rating_away + xgr_diff + 
+                 defensive_rating_home,l1l2 = ~ xgr_diff,
+               l3 =~ 1,data = df_stats,distribution = "discrete",jmax = 0)
+
+
+
+
+# Evaluate the model ------------------------------------------------------
+
+mod = fit10
+
+test = df_stats %>%
+  filter(Date > "2017-11-01")
+
+# Calculate lambdas
+lambdas = matrix(NA,nrow = nrow(test),ncol = 3)
+for (i in 1:nrow(test)){
+  
+  l1 = exp(mod$beta1[1] + mod$beta1[2]*test$attacking_rating_home[i] +
+             mod$beta1[4]*test$xgr_diff[i] +
+             mod$beta1[3]*test$defensive_rating_away[i])
+  l2 = exp(mod$beta2[1] + mod$beta2[2]*test$attacking_rating_away[i] +
+             mod$beta2[4]*test$xgr_diff[i] +
+             mod$beta2[3]*test$defensive_rating_home[i])
+  l3 = exp(mod$beta3[1])
+  lambdas[i,1] = l1
+  lambdas[i,2] = l2
+  lambdas[i,3] = l3
+  
+}
+
+probs = matrix(NA,nrow = nrow(test),ncol = 3)
+for (i in 1:nrow(lambdas)){
+  
+tab = bivpois.table(10,10,lambda = c(lambdas[i,1],lambdas[i,2],lambdas[i,3]))
+tab = (1 - mod$p)*tab
+tab[1,1] = tab[1,1] + mod$p
+
+probs[i,2] = sum(diag(tab))
+probs[i,1] = sum(tab[lower.tri(tab)])
+probs[i,3] = sum(tab[upper.tri(tab)])
+
+}
+
+
+results = matrix(NA,nrow = nrow(test),ncol = 3)
+for (i in 1:nrow(results)){
+if (test$FTHG[i] > test$FTAG[i]){
+  results[i,] = c(1,0,0)
+}  
+else if (test$FTHG[i] < test$FTAG[i]){
+  results[i,] = c(0,0,1)
+}
+else {
+  results[i,] = c(0,1,0)
+}
+  
+}
+
+
+
+# RPS ---------------------------------------------------------------------
+
+rankProbScore <- function(predictions, observed){
+  ncat <- ncol(predictions)
+  npred <- nrow(predictions)
+  
+  rps <- numeric(npred)
+  
+  for (rr in 1:npred){
+    obsvec <- rep(0, ncat)
+    obsvec[observed[rr]] <- 1
+    cumulative <- 0
+    for (i in 1:ncat){
+      cumulative <- cumulative + (sum(predictions[rr,1:i]) - sum(obsvec[1:i]))^2
+    }
+    rps[rr] <- (1/(ncat-1))*cumulative
+  }
+  return(rps)
+}
+
+r = rankProbScore(probs,results)
+
+mean(r)
+
+
+
 
 
 
